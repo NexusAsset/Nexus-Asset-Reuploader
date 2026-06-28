@@ -27,7 +27,15 @@ The warning is being submitted to Microsoft for review, and a code-signed build 
 
 1. Unzip the download anywhere.
 2. Run **`Nexus Asset Reuploader.exe`**.
-3. Copy **`NexusReuploader.rbxmx`** into `%LOCALAPPDATA%\Roblox\Plugins` and restart Roblox Studio.
+3. Install the Studio plugin — pick whichever is easiest:
+   - **One command** — paste into Command Prompt:
+     ```
+     mkdir "%LOCALAPPDATA%\Roblox\Plugins" 2>nul & curl -L -o "%LOCALAPPDATA%\Roblox\Plugins\NexusReuploader.rbxmx" https://github.com/NexusAsset/nexus-asset-reuploader/releases/latest/download/NexusReuploader.rbxmx
+     ```
+   - **Double-click installer** — download [`install-plugin.bat`](https://github.com/NexusAsset/nexus-asset-reuploader/releases/latest/download/install-plugin.bat) and run it.
+   - **Manual** — copy `NexusReuploader.rbxmx` into `%LOCALAPPDATA%\Roblox\Plugins`.
+
+   Then restart Roblox Studio.
 
 ## Setup (one time)
 
