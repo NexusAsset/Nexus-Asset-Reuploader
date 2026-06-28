@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexus Reuploader</title>
+<link rel="icon" href="/icon.png" />
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  :root{
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --mono:"Cascadia Code","SF Mono","Segoe UI Mono",Consolas,monospace;
+    --bg:#0a0a0b; --surface:#151517; --surface2:#1e1e22; --recess:#0e0e10; --console:#0b0b0c;
+    --txt:#fafafa; --muted:#8a8a92; --faint:#55555c;
+    --violet:#8b5cf6; --violet2:#7c3aed; --vdim:rgba(139,92,246,.13);
+    --indigo:#a1a1aa; --red:#f87171; --green:#4ade80;
+    --hi:inset 0 1px 0 rgba(255,255,255,.03);
+    --lift:0 1px 2px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--txt);font-family:var(--font);-webkit-font-smoothing:antialiased;letter-spacing:-.1px;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:9px;}
+  .app{display:grid;grid-template-columns:250px 1fr;min-height:100vh;}
+
+  .sidebar{position:relative;background:#0c0c0e;border-right:1px solid rgba(255,255,255,.06);
+    padding:26px 18px;display:flex;flex-direction:column;gap:28px;overflow:hidden;}
+  .logo-row{display:flex;align-items:center;gap:12px;position:relative;z-index:1;}
+  .logo-img{width:46px;height:46px;border-radius:13px;}
+  .wordmark{font-weight:800;font-size:20px;letter-spacing:2px;line-height:1;}
+  .wordsub{color:var(--muted);font-size:10.5px;letter-spacing:3px;text-transform:uppercase;margin-top:5px;}
+  nav{display:flex;flex-direction:column;gap:3px;position:relative;z-index:1;}
+  .nav{display:flex;align-items:center;gap:12px;background:none;border:none;color:var(--muted);font-family:inherit;
+    font-size:13.5px;font-weight:550;padding:12px 14px;border-radius:11px;cursor:pointer;text-align:left;transition:.14s;position:relative;}
+  .nav i{width:17px;height:17px;}
+  .nav:hover{color:var(--txt);background:rgba(255,255,255,.04);}
+  .nav.active{color:#fff;background:rgba(255,255,255,.06);}
+  .nav.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--violet);}
+  .side-foot{margin-top:auto;position:relative;z-index:1;}
+  .conn{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted);padding:11px 13px;background:var(--recess);border-radius:10px;}
+  .ring{width:7px;height:7px;border-radius:50%;background:var(--green);}
+  .ver{color:var(--faint);font-size:10.5px;text-align:center;margin-top:11px;letter-spacing:.5px;}
+
+  .main{padding:36px clamp(24px,4vw,54px);overflow-y:auto;max-height:100vh;}
+  .phead{margin-bottom:26px;}
+  .phead h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.5px;}
+  .phead p{color:var(--muted);font-size:13px;margin:7px 0 0;}
+  .view{animation:fade .22s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(5px);}to{opacity:1;}}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px;}
+  .tile{background:var(--surface);border-radius:16px;padding:19px 21px;position:relative;overflow:hidden;box-shadow:var(--hi),var(--lift);}
+  .tile .ic{position:absolute;right:15px;top:15px;color:var(--faint);width:20px;height:20px;opacity:.55;}
+  .tile .n{font-size:31px;font-weight:750;letter-spacing:-1.5px;line-height:1;}
+  .tile .l{color:var(--muted);font-size:12px;margin-top:9px;}
+  .tile.v .n{color:var(--violet);} .tile.r .n{color:var(--red);} .tile.i .n{color:var(--indigo);}
+
+  .row2{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start;}
+  @media(max-width:1000px){.row2{grid-template-columns:1fr;}}
+  .card{background:var(--surface);border-radius:16px;padding:21px;box-shadow:var(--hi),var(--lift);}
+  .card h2{font-size:14px;font-weight:650;margin:0 0 2px;display:flex;align-items:center;gap:9px;letter-spacing:-.2px;}
+  .card h2 i{color:var(--muted);width:16px;height:16px;}
+  .card .desc{color:var(--muted);font-size:12px;margin:0 0 16px;line-height:1.55;}
+
+  .console{background:var(--console);border-radius:13px;height:340px;overflow:auto;padding:15px 17px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.8;box-shadow:inset 0 1px 3px rgba(0,0,0,.5);}
+  .console .row{display:flex;gap:10px;}
+  .console .t{color:#4a4660;}
+  .ok{color:#7ee9b0;} .fail{color:#fda4af;} .quota{color:#fcd34d;} .info{color:#9b95b8;}
+  .conhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .runstate{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);}
+  .rdot{width:7px;height:7px;border-radius:50%;background:var(--faint);}
+  .rdot.go{background:var(--green);}
+
+  label{display:block;font-size:11.5px;color:var(--muted);margin:15px 0 7px;font-weight:500;}
+  label:first-of-type{margin-top:0;}
+  input{width:100%;background:var(--recess);border:none;color:var(--txt);padding:12px 13px;border-radius:10px;
+    font-size:13px;font-family:inherit;outline:none;transition:.15s;box-shadow:inset 0 1px 3px rgba(0,0,0,.45);}
+  input::placeholder{color:var(--faint);}
+  input:focus{box-shadow:inset 0 1px 3px rgba(0,0,0,.45),0 0 0 3px var(--vdim);}
+  .keyline{display:flex;gap:9px;align-items:center;justify-content:space-between;padding:11px 0;}
+  .keyline+.mini{margin-bottom:6px;}
+  .keyline .lab{font-size:13px;font-weight:500;}
+  .keyline .sub{color:var(--faint);font-size:11px;}
+  .pill{font-size:10.5px;padding:3px 10px;border-radius:999px;font-weight:600;}
+  .pill.on{background:rgba(74,222,128,.13);color:#86efac;} .pill.off{background:rgba(248,113,113,.13);color:#fca5a5;}
+  .mini{margin-top:7px;display:flex;gap:8px;}
+  .mini input{padding:10px 11px;font-size:12px;}
+  .btn{display:inline-flex;align-items:center;gap:7px;background:var(--violet);color:#fff;
+    border:none;padding:11px 16px;border-radius:9px;font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer;
+    transition:.13s;white-space:nowrap;}
+  .btn:hover{background:#7c4ddb;}
+  .btn.sm{padding:9px 13px;}
+  .btn.g{background:var(--surface2);color:var(--txt);box-shadow:var(--hi);}
+
+  .acc{display:flex;align-items:center;gap:13px;background:var(--recess);border-radius:13px;padding:13px 15px;margin-bottom:9px;box-shadow:inset 0 1px 2px rgba(0,0,0,.3);}
+  .acc-ava{flex:none;width:40px;height:40px;border-radius:10px;background:#26262a;display:grid;place-items:center;color:#d4d4d8;font-weight:700;font-size:16px;object-fit:cover;}
+  .profile{display:flex;align-items:center;gap:11px;background:var(--recess);border-radius:12px;padding:10px 12px;margin:0 0 16px;box-shadow:inset 0 1px 2px rgba(0,0,0,.3);}
+  .profile img{width:40px;height:40px;border-radius:10px;background:#241d33;object-fit:cover;flex:none;}
+  .profile .pn{font-size:13px;font-weight:600;}
+  .profile .pu{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;}
+  .profile .pb{margin-left:auto;font-size:10px;font-weight:600;background:rgba(52,211,153,.15);color:#6ee7b7;padding:3px 9px;border-radius:999px;}
+  .rup-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+  .rbtn{display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--recess);color:var(--txt);border:none;border-radius:13px;padding:16px 12px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:inset 0 1px 2px rgba(0,0,0,.3);transition:.15s;}
+  .rbtn:hover{background:rgba(255,255,255,.05);}
+  .rbtn:disabled{opacity:.45;cursor:not-allowed;}
+  .rbtn i{width:22px;height:22px;color:var(--muted);}
+  .rup-opts{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .chk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:0;cursor:pointer;}
+  .chk input{width:auto;accent-color:var(--violet);}
+  .rup-target{display:flex;gap:8px;align-items:center;}
+  .rup-target input{width:220px;}
+  .rpill{font-size:10.5px;padding:3px 9px;border-radius:999px;font-weight:600;margin-left:8px;}
+  .rpill.on{background:rgba(110,233,176,.15);color:#6ee7b7;} .rpill.off{background:rgba(160,130,240,.12);color:var(--muted);}
+  .warn{display:none;align-items:center;gap:7px;background:rgba(251,113,133,.1);color:#fda4af;font-size:11.5px;padding:8px 11px;border-radius:9px;margin-top:8px;}
+  .seg{display:inline-flex;background:var(--recess);border-radius:9px;padding:2px;}
+  .segbtn{background:none;border:none;color:var(--muted);font-family:inherit;font-size:12px;font-weight:600;padding:7px 12px;border-radius:7px;cursor:pointer;}
+  .segbtn.active{background:var(--surface2);color:var(--txt);}
+  .tlbl{color:var(--muted);font-size:12px;}
+  .btn.danger{background:var(--red);} .btn.danger:hover{background:#ef4444;}
+  .toast-wrap{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:8px;z-index:50;}
+  .toast{background:var(--surface2);color:var(--txt);font-size:12.5px;font-weight:500;padding:11px 15px;border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.55);display:flex;align-items:center;gap:9px;max-width:330px;animation:tin .2s ease;}
+  .toast::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green);flex:none;}
+  .toast.err::before{background:var(--red);}
+  @keyframes tin{from{opacity:0;transform:translateX(12px);}to{opacity:1;}}
+  .acc-main{flex:1;min-width:0;}
+  .acc-name{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .acc-sub{color:var(--muted);font-size:11.5px;margin-top:3px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .acc .rm{flex:none;background:rgba(251,113,133,.12);color:#fda4af;border:none;width:32px;height:32px;border-radius:9px;cursor:pointer;display:grid;place-items:center;}
+  .acc .rm:hover{background:rgba(251,113,133,.22);}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:28px;background:var(--recess);border-radius:13px;box-shadow:inset 0 1px 2px rgba(0,0,0,.3);}
+  .badge{font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;}
+  .badge.usr{background:rgba(255,255,255,.08);color:#d4d4d8;} .badge.grp{background:rgba(255,255,255,.08);color:#d4d4d8;}
+  .grid2{display:grid;grid-template-columns:1fr auto;gap:9px;align-items:end;}
+
+  .step{display:flex;gap:14px;padding:15px 0;}
+  .step+.step{box-shadow:inset 0 1px 0 rgba(255,255,255,.035);}
+  .step .num{flex:none;width:28px;height:28px;border-radius:9px;background:var(--vdim);color:#d8b4fe;display:grid;place-items:center;font-weight:700;font-size:13px;}
+  .step .body{font-size:13px;color:var(--muted);line-height:1.6;}
+  .step .body b{color:var(--txt);}
+  .step .body code{background:var(--recess);padding:1px 7px;border-radius:6px;font-family:var(--mono);font-size:11.5px;color:#c4b5fd;}
+  .faqq{font-size:13px;font-weight:600;margin:17px 0 5px;}
+  .faqa{font-size:12.5px;color:var(--muted);line-height:1.65;}
+  .note{margin-top:16px;background:rgba(129,140,248,.08);border-radius:11px;padding:13px 15px;font-size:12px;color:#b9c0f5;box-shadow:var(--hi);}
+  .guide-step{display:flex;gap:22px;align-items:center;padding:20px 0;}
+  .guide-step+.guide-step{box-shadow:inset 0 1px 0 rgba(255,255,255,.04);}
+  .guide-art{flex:none;width:300px;background:#0c0a13;border-radius:12px;padding:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.45);}
+  .guide-art svg{width:100%;height:auto;display:block;}
+  .guide-txt{flex:1;}
+  .gnum{display:inline-grid;place-items:center;width:25px;height:25px;border-radius:8px;background:var(--vdim);color:#d8b4fe;font-weight:700;font-size:12px;margin-bottom:9px;}
+  .guide-txt h3{margin:0 0 6px;font-size:15px;font-weight:650;letter-spacing:-.2px;}
+  .guide-txt p{margin:0;color:var(--muted);font-size:13px;line-height:1.6;}
+  .guide-txt code{background:var(--recess);padding:1px 7px;border-radius:6px;font-family:var(--mono);font-size:11.5px;color:#c4b5fd;}
+  @media(max-width:780px){.guide-step{flex-direction:column;align-items:stretch;}.guide-art{width:100%;}}
+  .shot-step{padding:16px 0;}
+  .shot-step+.shot-step{box-shadow:inset 0 1px 0 rgba(255,255,255,.04);}
+  .shot-head{display:flex;align-items:center;gap:11px;margin-bottom:2px;}
+  .shot-head .gnum{margin-bottom:0;}
+  .shot-head h3{margin:0;font-size:15px;font-weight:650;letter-spacing:-.2px;}
+  .shot-step p{margin:7px 0 13px;color:var(--muted);font-size:13px;line-height:1.6;}
+  .shot-step p code{background:var(--recess);padding:1px 7px;border-radius:6px;font-family:var(--mono);font-size:11.5px;color:#c4b5fd;}
+  .shot{display:block;width:100%;max-width:780px;border-radius:10px;border:1px solid #262630;box-shadow:0 8px 22px rgba(0,0,0,.4);}
+  #gate{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;place-items:center;}
+  #gate.show{display:grid;}
+  .gatecard{width:380px;max-width:90vw;background:var(--surface);border:1px solid #2a2a30;border-radius:18px;padding:34px 30px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+  .gatecard .glogo{width:54px;height:54px;border-radius:13px;margin:0 auto 18px;display:block;}
+  .gatecard h2{margin:0 0 7px;font-size:19px;font-weight:680;letter-spacing:-.3px;}
+  .gatecard p{margin:0 0 22px;color:var(--muted);font-size:13px;line-height:1.55;}
+  .gatecard .ava{width:60px;height:60px;border-radius:50%;margin:0 auto 14px;display:block;border:2px solid var(--violet);}
+  .dbtn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;background:var(--violet);color:#fff;border:none;
+    font-family:inherit;font-weight:600;font-size:14px;padding:13px;border-radius:11px;cursor:pointer;text-decoration:none;}
+  .dbtn:hover{background:var(--violet2);}
+  .dbtn.ghost{background:var(--surface2);color:var(--txt);margin-top:10px;}
+  .gskip{display:inline-block;margin-top:16px;color:var(--faint);font-size:12px;text-decoration:none;cursor:pointer;}
+  .gskip:hover{color:var(--muted);}
+  .me{display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--recess);border-radius:10px;margin-bottom:9px;}
+  .me img{width:26px;height:26px;border-radius:50%;}
+  .me .mn{font-size:12.5px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .me .lo{color:var(--faint);cursor:pointer;font-size:11px;}
+  .me .lo:hover{color:var(--red);}
+  .sbtn{display:flex;align-items:center;gap:9px;width:100%;justify-content:center;background:var(--surface2);color:var(--txt);border:1px solid #2a2a30;
+    font-family:inherit;font-size:12.5px;font-weight:600;padding:10px;border-radius:10px;cursor:pointer;margin-bottom:9px;}
+  .sbtn:hover{border-color:var(--violet);}
+  .sbtn i{width:15px;height:15px;}
+  .sbtn.dc{background:var(--vdim);color:#c4b5fd;border-color:transparent;}
+</style>
+</head>
+<body>
+  <div class="toast-wrap" id="toasts"></div>
+  <div id="gate">
+    <div class="gatecard" id="gateCard">
+      <img src="/icon.png" class="glogo" alt="Nexus" />
+      <h2 id="gateTitle">Sign in to Nexus</h2>
+      <p id="gateSub">Connect your Discord account to access your dashboard.</p>
+      <a class="dbtn" id="gateAction" href="#"><i data-lucide="log-in"></i><span id="gateBtnLabel">Sign in with Discord</span></a>
+      <a class="gskip" id="gateSkip">Skip for now</a>
+    </div>
+  </div>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo-row">
+        <img src="/icon.png" class="logo-img" alt="Nexus" />
+        <div><div class="wordmark">NEXUS</div><div class="wordsub">Reuploader</div></div>
+      </div>
+      <nav>
+        <button class="nav active" data-v="dashboard"><i data-lucide="layout-dashboard"></i>Dashboard</button>
+        <button class="nav" data-v="accounts"><i data-lucide="users"></i>Accounts</button>
+        <button class="nav" data-v="setup"><i data-lucide="book-open"></i>Setup &amp; FAQ</button>
+      </nav>
+      <div class="side-foot">
+        <div class="me" id="meRow" style="display:none"><img id="meAva" src="" alt="" /><span class="mn" id="meName"></span><span class="lo" id="meLogout">Log out</span></div>
+        <button class="sbtn" id="sideSignin" style="display:none"><i data-lucide="log-in"></i>Sign in with Discord</button>
+        <button class="sbtn dc" id="joinDiscord"><i data-lucide="message-circle"></i>Join our Discord</button>
+        <div class="conn"><span class="ring" id="ring"></span><span id="conn">Connected</span></div>
+        <div class="ver">v1.0</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="view-dashboard" class="view">
+        <div class="phead"><h1>Dashboard</h1><p>Live reupload activity, credentials, and quota status.</p></div>
+        <div class="stats">
+          <div class="tile v"><i class="ic" data-lucide="arrow-up-circle"></i><div class="n" id="okBig">0</div><div class="l">Reuploaded this session</div></div>
+          <div class="tile r"><i class="ic" data-lucide="x-circle"></i><div class="n" id="failBig">0</div><div class="l">Failed</div></div>
+          <div class="tile i"><i class="ic" data-lucide="users"></i><div class="n" id="accBig">0</div><div class="l">Accounts in rotation</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <h2><i data-lucide="upload-cloud"></i>Reupload <span class="rpill off" id="pluginPill">plugin offline</span></h2>
+          <p class="desc">Pick what to reupload. The Studio plugin runs it and swaps the new ids into your place automatically.</p>
+          <div class="rup-row">
+            <button class="rbtn" onclick="reup('Animation')"><i data-lucide="person-standing"></i>Animations</button>
+            <button class="rbtn" onclick="reup('Audio')"><i data-lucide="music"></i>Sounds</button>
+            <button class="rbtn" onclick="reup('Image')"><i data-lucide="image"></i>Images</button>
+          </div>
+          <div class="rup-opts">
+            <label class="chk"><input type="checkbox" id="skipOwned" checked> Skip assets you already own</label>
+            <div class="rup-target">
+              <span class="tlbl">Upload to</span>
+              <div class="seg">
+                <button id="seg-user" class="segbtn" onclick="setTgt('user')">My profile</button>
+                <button id="seg-group" class="segbtn active" onclick="setTgt('group')">A group</button>
+              </div>
+              <input id="rup-creator" placeholder="group id" style="width:170px">
+              <button class="btn sm" onclick="saveTarget()">Save</button>
+              <button class="btn g sm" onclick="clearTarget()">Clear</button>
+            </div>
+          </div>
+          <div class="warn" id="keyWarn"><i data-lucide="alert-triangle" style="width:14px;height:14px"></i><span>No API key set - add one under Credentials before uploading.</span></div>
+          <div class="warn" id="rupWarn"><i data-lucide="alert-triangle" style="width:14px;height:14px"></i><span>Open Roblox Studio and the Nexus plugin first, then this runs.</span></div>
+        </div>
+        <div class="row2">
+          <div class="card">
+            <div class="conhead">
+              <h2><i data-lucide="terminal"></i>Activity</h2>
+              <div style="display:flex;align-items:center;gap:14px">
+                <div class="runstate"><span class="rdot" id="rdot"></span><span id="busy">Idle</span></div>
+                <button class="btn sm danger" id="stopBtn" onclick="stopRun()" style="display:none">Stop</button>
+                <button class="btn g sm" onclick="document.getElementById('console').innerHTML=''">Clear</button>
+              </div>
+            </div>
+            <div class="console" id="console"></div>
+          </div>
+          <div class="card">
+            <h2><i data-lucide="key-round"></i>Credentials</h2>
+            <p class="desc">Stored on this machine only. Used as the default account when none are in rotation.</p>
+            <div class="profile" id="profileChip" style="display:none"><img id="profileAva" alt=""><div><div class="pn" id="profileName"></div><div class="pu" id="profileUser"></div></div><span class="pb">connected</span></div>
+            <div class="keyline"><div><div class="lab">API key</div><div class="sub">asset:read + asset:write + asset-permissions:write</div></div><span class="pill off" id="keyBadge">not set</span></div>
+            <div class="mini"><input id="apiKey" type="password" placeholder="paste API key"><button class="btn sm" onclick="save('apiKey')">Save</button><button class="btn g sm" onclick="clearCred('apiKey')">Clear</button></div>
+            <div class="keyline" style="margin-top:8px"><div><div class="lab">Cookie</div><div class="sub">audio &amp; images only</div></div><span class="pill off" id="cookieBadge">not set</span></div>
+            <div class="mini"><input id="cookie" type="password" placeholder="paste .ROBLOSECURITY"><button class="btn sm" onclick="save('cookie')">Save</button><button class="btn g sm" onclick="clearCred('cookie')">Clear</button></div>
+            <div class="warn" id="cookieWarn"><i data-lucide="alert-triangle" style="width:14px;height:14px"></i><span>Cookie expired (you logged in elsewhere). Re-paste your current one.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-accounts" class="view" style="display:none">
+        <div class="phead"><h1>Connected Accounts</h1><p>Multiply your quota by rotating across accounts.</p></div>
+        <div class="card" style="margin-bottom:16px">
+          <h2><i data-lucide="layers"></i>Rotation pool</h2>
+          <p class="desc">Roblox's audio quota is <b>per account</b> (100/month). Add alt-account keys that all point at <b>your game's group</b>: when one runs out, Nexus moves to the next, and every asset still lands in your game. No grant, no other reuploader does this.</p>
+          <div id="accountList"></div>
+        </div>
+        <div class="card">
+          <h2><i data-lucide="user-plus"></i>Add an account</h2>
+          <p class="desc">Each account needs its own Open Cloud key (<b>asset:write</b>). Cookie only if it will upload audio or images.</p>
+          <div class="grid2">
+            <div><label>Creator id</label><input id="acc-id" placeholder="user id or group id"></div>
+            <button class="btn g" id="acc-type" onclick="toggleType()" style="height:42px">User</button>
+          </div>
+          <label>API key</label><input id="acc-key" type="password" placeholder="Open Cloud key (asset:write)">
+          <label>Cookie (optional)</label><input id="acc-cookie" type="password" placeholder=".ROBLOSECURITY">
+          <label>Label (optional)</label><input id="acc-name" placeholder="auto-filled from the account">
+          <div style="margin-top:17px;display:flex;align-items:center;gap:12px">
+            <button class="btn" onclick="addAccount()"><i data-lucide="plus" style="width:14px;height:14px"></i>Add account</button>
+            <span id="acc-msg" style="font-size:12px"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-setup" class="view" style="display:none">
+        <div class="phead"><h1>Setup &amp; FAQ</h1><p>Get running in a few steps, with real screenshots.</p></div>
+        <div class="card" style="margin-bottom:16px">
+          <h2><i data-lucide="list-checks"></i>Step-by-step</h2>
+          <p class="desc">From zero to a working reupload in about two minutes.</p>
+
+          <div class="shot-step">
+            <div class="shot-head"><div class="gnum">1</div><h3>Create an Open Cloud API key</h3></div>
+            <p>Sign in at <b>create.roblox.com</b>, open <b>Open Cloud &rarr; API Keys</b>, and click <b>Create API Key</b>.</p>
+            <img class="shot" src="/faq/01-apikeys.png" alt="Create API Key" loading="lazy" />
+          </div>
+
+          <div class="shot-step">
+            <div class="shot-head"><div class="gnum">2</div><h3>Name it and add permissions</h3></div>
+            <p>Give it a name. Under <b>Access Permissions</b> add the <b>Assets</b> API with <code>asset:read</code> and <code>asset:write</code>, then add <b>Asset Permissions</b> with <code>asset-permissions:write</code>. Leave <b>Restrict by Creator</b> OFF.</p>
+            <img class="shot" src="/faq/02-permissions.png" alt="API key permissions" loading="lazy" />
+          </div>
+
+          <div class="shot-step">
+            <div class="shot-head"><div class="gnum">3</div><h3>Set security and generate</h3></div>
+            <p>Under <b>Security</b>, set <b>Accepted IP Addresses</b> to <code>0.0.0.0/0</code>, then click <b>Save &amp; Generate Key</b>.</p>
+            <img class="shot" src="/faq/03-security.png" alt="API key security settings" loading="lazy" />
+          </div>
+
+          <div class="shot-step">
+            <div class="shot-head"><div class="gnum">4</div><h3>Copy your key</h3></div>
+            <p><b>Copy the key now</b> &mdash; Roblox shows it only once. Keep it private and never share it with anyone.</p>
+            <img class="shot" src="/faq/04-key.png" alt="Copy your API key" loading="lazy" />
+          </div>
+
+          <div class="shot-step">
+            <div class="shot-head"><div class="gnum">5</div><h3>Add it to Nexus and set your target</h3></div>
+            <p>Paste the key into <b>Credentials</b> on the Dashboard and Save. Choose <b>My profile</b> or <b>A group</b> (enter the group id), then Save. Pool several keys under <b>Accounts</b> to beat the monthly quota.</p>
+            <img class="shot" src="/faq/05-app.png" alt="Set your reupload target in Nexus" loading="lazy" />
+          </div>
+
+          <div class="shot-step">
+            <div class="shot-head"><div class="gnum">6</div><h3>Install the plugin and reupload</h3></div>
+            <p>Unzip the download, then copy <code>NexusReuploader.rbxmx</code> into <code>%LOCALAPPDATA%\Roblox\Plugins</code> and restart Studio. Open the <b>Nexus Reuploader</b> plugin, pick <b>Animation / Audio / Image</b>, and hit <b>Reupload</b> &mdash; new ids swap into your place automatically.</p>
+            <img class="shot" src="/faq/06-download.png" alt="Plugin download files" loading="lazy" />
+          </div>
+          <div class="note">Your API key gives access only to the permissions you pick. Never share it. Nexus stores it only on this machine and sends it only to Roblox, it is never shared with anyone.</div>
+        </div>
+        <div class="card">
+          <h2><i data-lucide="help-circle"></i>FAQ</h2>
+          <div class="faqq">Why does audio sometimes stop partway?</div>
+          <div class="faqa">Roblox caps audio uploads at 100/month per account. Nexus detects the cap and rotates to your next account automatically. Add more under Accounts to keep going.</div>
+          <div class="faqq">Do I need the cookie?</div>
+          <div class="faqa">Only for audio and images, which are pulled from the asset CDN. Animations are read directly inside Studio and need no cookie. Note: logging into Roblox in your browser expires the saved cookie, so re-paste it if uploads start failing.</div>
+          <div class="faqq">Is my account safe?</div>
+          <div class="faqa">Your API key and cookie are stored only on this machine and are never sent anywhere except Roblox itself. Uploads use Roblox's official Open Cloud API.</div>
+          <div class="faqq">Why did an asset get skipped?</div>
+          <div class="faqa">With "skip owned" on, anything already owned by your target account or group is left alone so you don't waste quota. Turn it off to force a fresh copy.</div>
+          <div class="faqq">Where do the new ids go?</div>
+          <div class="faqa">They're swapped in automatically across instances, image properties, value objects, attributes, and script source, all under one Undo in Studio.</div>
+          <div class="faqq">Can I add more than one account?</div>
+          <div class="faqa">Yes. Add several under Accounts and Nexus rotates to the next when one hits its monthly quota, so you can keep going.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+  lucide.createIcons();
+  let seen=0, okc=0, failc=0, accType='user';
+  const $=id=>document.getElementById(id);
+  function startSignin(){
+    fetch('/discord/open').catch(()=>{});
+    $('gateTitle').textContent='Waiting for Discord...';
+    $('gateSub').textContent='A browser tab opened. Approve the sign-in there, then come back to this window.';
+    let tries=0;
+    const iv=setInterval(async()=>{
+      tries++;
+      let s={}; try{ s=await fetch('/session').then(r=>r.json()); }catch(e){}
+      if(s&&s.loggedIn){ clearInterval(iv); sessionStorage.removeItem('nexusSkip'); loadSession(); toast('Signed in as '+s.username,'ok'); }
+      else if(tries>40){ clearInterval(iv); $('gateTitle').textContent='Sign in to Nexus'; $('gateSub').textContent='That timed out. Click to try again.'; }
+    },1500);
+  }
+  async function loadSession(){
+    let s={};
+    try{ s=await fetch('/session').then(r=>r.json()); }catch(e){}
+    const gate=$('gate');
+    if(s && !s.signinEnabled){
+      gate.classList.remove('show');
+      $('meRow').style.display='none'; $('sideSignin').style.display='none';
+      return;
+    }
+    if(s&&s.loggedIn){
+      gate.classList.remove('show');
+      $('meRow').style.display='flex'; $('sideSignin').style.display='none';
+      $('meName').textContent=s.username||'Discord user';
+      if(s.avatarUrl){ $('meAva').src=s.avatarUrl; $('meAva').style.display=''; } else { $('meAva').style.display='none'; }
+    } else {
+      $('meRow').style.display='none'; $('sideSignin').style.display='flex';
+      if(sessionStorage.getItem('nexusSkip')==='1'){ gate.classList.remove('show'); } else { gate.classList.add('show'); }
+    }
+    lucide.createIcons();
+  }
+  document.addEventListener('DOMContentLoaded',()=>{
+    $('gateSkip').addEventListener('click',()=>{ sessionStorage.setItem('nexusSkip','1'); loadSession(); });
+    $('meLogout').addEventListener('click',async()=>{ try{ await fetch('/discord/logout',{method:'POST'}); }catch(e){} sessionStorage.removeItem('nexusSkip'); location.reload(); });
+    $('gateAction').addEventListener('click',(e)=>{ e.preventDefault(); startSignin(); });
+    $('sideSignin').addEventListener('click',()=>{ sessionStorage.removeItem('nexusSkip'); $('gate').classList.add('show'); startSignin(); });
+    $('joinDiscord').addEventListener('click',()=>{ fetch('/discord/invite').catch(()=>{}); });
+    loadSession();
+  });
+  const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  function toast(msg,kind){
+    const t=document.createElement('div'); t.className='toast'+(kind==='err'?' err':'');
+    t.textContent=msg; $('toasts').appendChild(t);
+    setTimeout(()=>{ t.style.transition='opacity .25s'; t.style.opacity='0'; setTimeout(()=>t.remove(),260); },3000);
+  }
+  async function clearCred(which){
+    await fetch('/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(which==='apiKey'?{clearKey:true}:{clearCookie:true})});
+    if(which==='cookie'){ whoamiId=''; whoami(); }
+    toast((which==='apiKey'?'API key':'Cookie')+' cleared'); poll();
+  }
+
+  function nav(v){
+    document.querySelectorAll('.view').forEach(x=>x.style.display='none');
+    $('view-'+v).style.display='';
+    document.querySelectorAll('.nav').forEach(t=>t.classList.toggle('active',t.dataset.v===v));
+    if(v==='accounts') loadAccounts();
+  }
+  document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.v)));
+
+  async function save(which){
+    const el=$(which), val=el.value.trim(); if(!val) return;
+    await fetch('/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(which==='apiKey'?{apiKey:val}:{cookie:val})});
+    el.value='';
+    toast((which==='apiKey'?'API key':'Cookie')+' saved');
+    if(which==='cookie') setTimeout(whoami,300);
+  }
+  function toggleType(){ accType=accType==='user'?'group':'user'; $('acc-type').textContent=accType==='user'?'User':'Group'; }
+  let tgt='group', whoamiId='', pluginOn=false, loadedTarget=false, hasKey=false, hasCookie=false;
+  function setTgtUI(){
+    $('seg-user').classList.toggle('active',tgt==='user');
+    $('seg-group').classList.toggle('active',tgt==='group');
+    $('rup-creator').placeholder = tgt==='user' ? 'your user id' : 'group id';
+  }
+  function setTgt(t){
+    tgt=t;
+    if(t==='user' && whoamiId && !$('rup-creator').value.trim()) $('rup-creator').value=whoamiId;
+    setTgtUI();
+  }
+  function saveTarget(){
+    fetch('/target',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({creatorId:$('rup-creator').value.trim(), isGroup:(tgt==='group')})});
+    toast('Target saved');
+  }
+  function clearTarget(){
+    $('rup-creator').value='';
+    fetch('/target',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({creatorId:'', isGroup:(tgt==='group')})});
+    toast('Target cleared');
+  }
+  async function reup(type){
+    if(!hasKey){ toast('No API key set - add one under Credentials first.','err'); return; }
+    if((type==='Audio'||type==='Image') && !hasCookie){ toast(type+' needs your cookie - add it under Credentials.','err'); return; }
+    const body={assetType:type, skipOwned:$('skipOwned').checked, creatorId:$('rup-creator').value.trim(), isGroup:(tgt==='group')};
+    await fetch('/job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast(pluginOn ? ('Reupload requested: '+type) : 'Queued - but the plugin is offline. Open it in Studio.', pluginOn?'':'err');
+  }
+  function stopRun(){ fetch('/cancel',{method:'POST'}); toast('Stop requested'); }
+
+  async function loadAccounts(){
+    try{
+      const d=await(await fetch('/accounts')).json();
+      const list=d.accounts||[]; const el=$('accountList');
+      if(!list.length){ el.innerHTML='<div class="empty">No accounts yet. Add one below to enable rotation.</div>'; return; }
+      el.innerHTML=list.map(a=>`
+        <div class="acc">
+          ${a.avatarUrl?`<img class="acc-ava" src="${a.avatarUrl}" alt="">`:`<div class="acc-ava">${esc((a.displayName||a.username||a.name||'?').slice(0,1).toUpperCase())}</div>`}
+          <div class="acc-main">
+            <div class="acc-name">${esc(a.displayName||a.name||'Unknown')} <span class="badge ${a.isGroup?'grp':'usr'}">${a.isGroup?'Group':'User'}</span></div>
+            <div class="acc-sub">${a.username?('@'+esc(a.username)+' · '):''}id ${esc(a.creatorId)} · key ••••${esc(a.keyTail||'----')}${a.hasCookie?' · cookie ✓':''}</div>
+          </div>
+          <button class="rm" onclick="removeAccount(${a.index})"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
+        </div>`).join('');
+      lucide.createIcons();
+    }catch(e){ $('accountList').innerHTML='<div class="empty">Could not load accounts.</div>'; }
+  }
+  async function addAccount(){
+    const msg=$('acc-msg');
+    const body={ creatorId:$('acc-id').value.trim(), isGroup:accType==='group', apiKey:$('acc-key').value.trim(), cookie:$('acc-cookie').value.trim(), name:$('acc-name').value.trim() };
+    if(!body.creatorId||!body.apiKey){ msg.style.color='var(--red)'; msg.textContent='Creator id and API key are required.'; return; }
+    msg.style.color='var(--muted)'; msg.textContent='Checking…';
+    const r=await(await fetch('/accounts/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    if(r.ok){ msg.style.color='var(--violet)'; msg.textContent='Added.'; toast('Attached '+(body.isGroup?'group':'user')+' '+body.creatorId); ['acc-id','acc-key','acc-cookie','acc-name'].forEach(i=>$(i).value=''); loadAccounts(); }
+    else{ msg.style.color='var(--red)'; msg.textContent=r.error||'Failed.'; toast(r.error||'Could not add account','err'); }
+  }
+  async function removeAccount(i){
+    await fetch('/accounts/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i})});
+    loadAccounts();
+  }
+
+  function line(a){
+    const c=$('console'); const d=document.createElement('div'); d.className='row '+a.kind;
+    d.innerHTML=`<span class="t">${a.time}</span><span>${esc(a.text)}</span>`;
+    c.appendChild(d);
+    if(a.kind==='ok') $('okBig').textContent=(++okc).toLocaleString();
+    if(a.kind==='fail') $('failBig').textContent=(++failc);
+    c.scrollTop=c.scrollHeight;
+  }
+  function pill(id,on){const b=$(id); b.className='pill '+(on?'on':'off'); b.textContent=on?'set':'not set';}
+  async function poll(){
+    try{
+      const s=await(await fetch('/status')).json();
+      pill('keyBadge',s.hasKey); pill('cookieBadge',s.hasCookie);
+      hasKey=s.hasKey; hasCookie=s.hasCookie; $('keyWarn').style.display=s.hasKey?'none':'flex';
+      $('accBig').textContent=s.accounts||0;
+      const pc=!!s.pluginConnected; pluginOn=pc;
+      $('pluginPill').className='rpill '+(pc?'on':'off'); $('pluginPill').textContent=pc?'plugin connected':'plugin offline';
+      $('rupWarn').style.display=pc?'none':'flex';
+      if(!loadedTarget){ loadedTarget=true; if(s.creatorId){ tgt=s.isGroup?'group':'user'; $('rup-creator').value=s.creatorId; } setTgtUI(); }
+      $('rdot').className='rdot'+(s.busy?' go':''); $('busy').textContent=s.busy?'Working…':'Idle';
+      $('stopBtn').style.display=s.busy?'inline-flex':'none';
+      $('ring').style.background='var(--green)'; $('conn').textContent='Connected';
+      const f=s.feed||[]; for(let i=seen;i<f.length;i++) line(f[i]); seen=f.length;
+    }catch(e){ $('ring').style.background='var(--red)'; $('conn').textContent='Helper offline'; }
+  }
+  async function whoami(){
+    try{
+      const w=await(await fetch('/whoami')).json();
+      const chip=$('profileChip');
+      if(w&&w.connected){
+        if(w.avatarUrl) $('profileAva').src=w.avatarUrl;
+        $('profileName').textContent=w.displayName||w.name||'Connected';
+        $('profileUser').textContent='@'+(w.name||'');
+        chip.style.display='flex';
+        $('cookieWarn').style.display='none';
+        whoamiId=w.id||'';
+        if(tgt==='user' && !$('rup-creator').value) $('rup-creator').value=whoamiId;
+      }else{
+        chip.style.display='none';
+        $('cookieWarn').style.display=(w&&w.error)?'flex':'none';
+      }
+    }catch(e){}
+  }
+  poll(); whoami(); setInterval(poll,1500); setInterval(whoami,15000);
+</script>
+</body>
+</html>

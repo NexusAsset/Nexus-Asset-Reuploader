@@ -1,0 +1,140 @@
+package main
+
+import (
+	"bufio"
+	"embed"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
+
+	"assetreuploader/internal/accounts"
+	"assetreuploader/internal/download"
+	"assetreuploader/internal/opencloud"
+	"assetreuploader/internal/server"
+)
+
+//go:embed index.html
+var indexHTML []byte
+
+//go:embed icon.png
+var iconPNG []byte
+
+//go:embed faq/*.png
+var faqFS embed.FS
+
+func main() {
+	enableANSIColors()
+	cfg := loadConfig("config.ini")
+
+	keyPath := cfg["apikey_file"]
+	if keyPath == "" {
+		keyPath = "apikey.txt"
+	}
+	cookiePath := cfg["cookie_file"]
+	if cookiePath == "" {
+		cookiePath = "cookie.txt"
+	}
+	accountsPath := cfg["accounts_file"]
+	if accountsPath == "" {
+		accountsPath = "accounts.json"
+	}
+	port := 38073
+	if p, ok := cfg["port"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(p)); err == nil {
+			port = n
+		}
+	}
+
+	up := opencloud.New()
+	dl := download.New()
+	store := accounts.Load(accountsPath)
+	srv := server.New(up, dl, store, keyPath, cookiePath)
+
+	mux := srv.Routes()
+	registerDiscordAuth(mux, port)
+	mux.Handle("/faq/", http.FileServer(http.FS(faqFS)))
+	mux.HandleFunc("/icon.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "max-age=86400")
+		_, _ = w.Write(iconPNG)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(indexHTML)
+	})
+
+	url := fmt.Sprintf("http://127.0.0.1:%d", port)
+	running := alreadyRunning(url)
+	if !running {
+		go func() { _ = srv.Start(port, originGuard(mux, port)) }()
+		for i := 0; i < 60; i++ {
+			if alreadyRunning(url) {
+				break
+			}
+			time.Sleep(80 * time.Millisecond)
+		}
+	}
+	if !openWindow(url, "Nexus Reuploader") {
+		openBrowser(url)
+		if !running {
+			select {}
+		}
+	}
+}
+
+func alreadyRunning(url string) bool {
+	c := &http.Client{Timeout: 600 * time.Millisecond}
+	resp, err := c.Get(url + "/ping")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+func originGuard(next http.Handler, port int) http.Handler {
+	self1 := fmt.Sprintf("http://127.0.0.1:%d", port)
+	self2 := fmt.Sprintf("http://localhost:%d", port)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			o := r.Header.Get("Origin")
+			if o != "" && o != self1 && o != self2 {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func openBrowser(url string) {
+	_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+}
+
+func loadConfig(path string) map[string]string {
+	out := map[string]string{}
+	f, err := os.Open(path)
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, "="); ok {
+			out[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+	}
+	return out
+}

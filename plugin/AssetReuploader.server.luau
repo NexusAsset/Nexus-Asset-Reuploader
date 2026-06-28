@@ -1,0 +1,303 @@
+--!nonstrict
+
+local HttpService = game:GetService("HttpService")
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
+local KSP = game:GetService("KeyframeSequenceProvider")
+local SerializationService = game:GetService("SerializationService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local InsertService = game:GetService("InsertService")
+
+local PORT = 38073
+local BASE = ("http://127.0.0.1:%d"):format(PORT)
+
+local IMG = {
+	Decal = { "Texture" }, Texture = { "Texture" },
+	ImageLabel = { "Image" }, ImageButton = { "Image" },
+	ParticleEmitter = { "Texture" }, Beam = { "Texture" }, Trail = { "Texture" },
+	MeshPart = { "TextureID" },
+	SurfaceAppearance = { "ColorMap", "MetalnessMap", "NormalMap", "RoughnessMap" },
+	Sky = { "SkyboxBk", "SkyboxDn", "SkyboxFt", "SkyboxLf", "SkyboxRt", "SkyboxUp" },
+}
+
+local toolbar = plugin:CreateToolbar("Nexus")
+local button = toolbar:CreateButton("Nexus Reuploader", "Connect to the Nexus app", "rbxassetid://96192001462406")
+button.ClickableWhenViewportHidden = true
+local widget = plugin:CreateDockWidgetPluginGui("AssetReuploaderWidget",
+	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 320, 384, 280, 320))
+widget.Title = "Nexus Reuploader"
+
+local b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local function base64encode(data)
+	return ((data:gsub(".", function(x)
+		local r, b = "", x:byte()
+		for i = 8, 1, -1 do r = r .. (b % 2 ^ i - b % 2 ^ (i - 1) > 0 and "1" or "0") end
+		return r
+	end) .. "0000"):gsub("%d%d%d?%d?%d?%d?", function(x)
+		if #x < 6 then return "" end
+		local c = 0
+		for i = 1, 6 do c = c + (x:sub(i, i) == "1" and 2 ^ (6 - i) or 0) end
+		return b64:sub(c + 1, c + 1)
+	end) .. ({ "", "==", "=" })[#data % 3 + 1])
+end
+
+local function make(class, props, parent)
+	local o = Instance.new(class)
+	for k, v in props do o[k] = v end
+	if parent then o.Parent = parent end
+	return o
+end
+
+local PURPLE = Color3.fromRGB(139, 92, 246)
+local BG = Color3.fromRGB(10, 10, 11)
+local CARD = Color3.fromRGB(21, 21, 23)
+local TXT = Color3.fromRGB(250, 250, 250)
+local MUT = Color3.fromRGB(138, 138, 146)
+local GREEN = Color3.fromRGB(74, 222, 128)
+local RED = Color3.fromRGB(248, 113, 113)
+local GREY = Color3.fromRGB(90, 90, 96)
+
+local root = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BG, BorderSizePixel = 0 }, widget)
+make("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), PaddingTop = UDim.new(0, 16), PaddingBottom = UDim.new(0, 14) }, root)
+make("UIListLayout", { Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder }, root)
+
+make("TextLabel", { Text = "NEXUS", LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, TextColor3 = TXT, Font = Enum.Font.GothamBold, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left }, root)
+make("TextLabel", { Text = "REUPLOADER", LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 11), BackgroundTransparency = 1, TextColor3 = MUT, Font = Enum.Font.Gotham, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left }, root)
+
+local statusFrame = make("Frame", { LayoutOrder = 3, Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = CARD, BorderSizePixel = 0 }, root)
+make("UICorner", { CornerRadius = UDim.new(0, 12) }, statusFrame)
+local dot = make("Frame", { Size = UDim2.new(0, 10, 0, 10), Position = UDim2.new(0, 15, 0.5, -5), BackgroundColor3 = GREY, BorderSizePixel = 0 }, statusFrame)
+make("UICorner", { CornerRadius = UDim.new(1, 0) }, dot)
+local statusLbl = make("TextLabel", { Text = "Connecting...", Position = UDim2.new(0, 35, 0, 0), Size = UDim2.new(1, -46, 1, 0), BackgroundTransparency = 1, TextColor3 = TXT, Font = Enum.Font.GothamMedium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left }, statusFrame)
+
+local connected = true
+local connBtn = make("TextButton", { LayoutOrder = 4, Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PURPLE, BorderSizePixel = 0, TextColor3 = Color3.fromRGB(255, 255, 255), Font = Enum.Font.GothamBold, TextSize = 13, Text = "Disconnect", AutoButtonColor = true }, root)
+make("UICorner", { CornerRadius = UDim.new(0, 10) }, connBtn)
+
+make("TextLabel", { Text = "Pick what to reupload from the Nexus app on your screen.", LayoutOrder = 5, Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, TextColor3 = MUT, Font = Enum.Font.Gotham, TextSize = 11, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left }, root)
+
+local logBox = make("ScrollingFrame", { LayoutOrder = 6, Size = UDim2.new(1, 0, 1, -158), BackgroundColor3 = Color3.fromRGB(13, 13, 14), BorderSizePixel = 0, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 5 }, root)
+make("UICorner", { CornerRadius = UDim.new(0, 10) }, logBox)
+make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 1) }, logBox)
+make("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }, logBox)
+local logN = 0
+local function logLine(text, color)
+	logN += 1
+	make("TextLabel", { Text = text, LayoutOrder = logN, Size = UDim2.new(1, -8, 0, 14), BackgroundTransparency = 1, TextColor3 = color or MUT, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.Code, TextSize = 11, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y }, logBox)
+	logBox.CanvasPosition = Vector2.new(0, 1e6)
+end
+local KIND = { ok = GREEN, fail = RED, info = MUT, quota = Color3.fromRGB(252, 211, 77) }
+
+local function plog(text, kind)
+	logLine(text, KIND[kind or "info"])
+	pcall(function()
+		HttpService:RequestAsync({
+			Url = BASE .. "/plugin-log", Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = HttpService:JSONEncode({ kind = kind or "info", text = text }),
+		})
+	end)
+end
+
+local function collect(kind)
+	local byId = {}
+	local function add(raw, inst, prop)
+		if type(raw) ~= "string" then return end
+		local id = string.match(raw, "%d+")
+		if id then byId[id] = byId[id] or {}; table.insert(byId[id], { inst = inst, prop = prop }) end
+	end
+	for _, d in game:GetDescendants() do
+		if kind == "Animation" and d:IsA("Animation") then
+			add(d.AnimationId, d, "AnimationId")
+		elseif kind == "Audio" and d:IsA("Sound") then
+			add(d.SoundId, d, "SoundId")
+		elseif kind == "Image" then
+			local props = IMG[d.ClassName]
+			if props then for _, p in ipairs(props) do add((d :: any)[p], d, p) end end
+		end
+	end
+	return byId
+end
+
+local function ownedByTarget(id, group, creatorId)
+	local ok, info = pcall(function() return MarketplaceService:GetProductInfo(tonumber(id), Enum.InfoType.Asset) end)
+	if not ok or type(info) ~= "table" or type(info.Creator) ~= "table" then return false end
+	if tostring(info.Creator.CreatorTargetId) ~= creatorId then return false end
+	local t = tostring(info.Creator.CreatorType)
+	return group and (t == "Group") or (not group and (t == "User"))
+end
+
+local function fetchAnim(id)
+	local ok, ks = pcall(function() return KSP:GetKeyframeSequenceAsync("rbxassetid://" .. id) end)
+	if not ok or not ks then return nil, "download failed" end
+	ks.Name = "AR_" .. id
+	local holder = Instance.new("Folder")
+	ks.Parent = holder
+	local oks, data = pcall(function() return SerializationService:SerializeInstancesAsync({ ks }) end)
+	holder:Destroy()
+	if not oks or not data then return nil, "serialize failed" end
+	local bytes = typeof(data) == "buffer" and buffer.tostring(data) or data
+	return base64encode(bytes)
+end
+
+local function applyEverywhere(mapping, byId)
+	local props, values, scripts, attrs = 0, 0, 0, 0
+	for oldId, refs in pairs(byId) do
+		local new = mapping[oldId]
+		if new then
+			for _, ref in ipairs(refs) do
+				pcall(function() (ref.inst :: any)[ref.prop] = "rbxassetid://" .. new end)
+				props += 1
+			end
+		end
+	end
+	local function replStr(s)
+		if type(s) ~= "string" then return s, false end
+		local ch = false
+		for old, new in pairs(mapping) do
+			s = s:gsub("rbxassetid://" .. old, function() ch = true; return "rbxassetid://" .. new end)
+			s = s:gsub("%f[%d]" .. old .. "%f[%D]", function() ch = true; return new end)
+		end
+		return s, ch
+	end
+	for _, d in game:GetDescendants() do
+		if d:IsA("StringValue") then
+			local ns, ch = replStr(d.Value); if ch then d.Value = ns; values += 1 end
+		elseif d:IsA("IntValue") or d:IsA("NumberValue") then
+			local id = tostring(math.floor(d.Value)); if mapping[id] then d.Value = tonumber(mapping[id]); values += 1 end
+		elseif d:IsA("LuaSourceContainer") then
+			local ok, src = pcall(function() return d.Source end)
+			if ok and type(src) == "string" then local ns, ch = replStr(src); if ch and pcall(function() d.Source = ns end) then scripts += 1 end end
+		end
+		for name, val in d:GetAttributes() do
+			if type(val) == "string" then local ns, ch = replStr(val); if ch then d:SetAttribute(name, ns); attrs += 1 end
+			elseif type(val) == "number" then local id = tostring(math.floor(val)); if mapping[id] then d:SetAttribute(name, tonumber(mapping[id])); attrs += 1 end end
+		end
+	end
+	return props, values, scripts, attrs
+end
+
+local function execute(j)
+	local kind = j.assetType
+	local creatorId = j.creatorId ~= "" and j.creatorId or nil
+	local isGroup = j.isGroup
+	local byId = collect(kind)
+	local ids = {}
+	for id in byId do table.insert(ids, id) end
+	if #ids == 0 then plog("No " .. kind .. "s found in this place.", "info") return end
+	plog(("Found %d unique %ss."):format(#ids, kind), "info")
+	local items, skipped = {}, 0
+	for _, id in ids do
+		if j.skipOwned and creatorId and ownedByTarget(id, isGroup, creatorId) then
+			skipped += 1
+		elseif kind == "Animation" then
+			local d, err = fetchAnim(id)
+			if d then table.insert(items, { id = id, name = "Anim_" .. id, dataB64 = d }) else plog(id .. "  x  " .. err, "fail") end
+		else
+			table.insert(items, { id = id, name = kind .. "_" .. id })
+		end
+	end
+	if skipped > 0 then plog(("Skipped %d already owned."):format(skipped), "info") end
+	if #items == 0 then plog("Nothing new to upload.", "info") return end
+	plog(("Uploading %d %s(s) in batches..."):format(#items, kind), "info")
+	local wireType = (kind == "Image") and "Decal" or kind
+	local mapping, sent, stopped = {}, 0, false
+	local CHUNK = 20
+	while sent < #items do
+		local chunk = {}
+		for k = sent + 1, math.min(sent + CHUNK, #items) do table.insert(chunk, items[k]) end
+		local ok, res = pcall(function()
+			return HttpService:RequestAsync({
+				Url = BASE .. "/reupload", Method = "POST",
+				Headers = { ["Content-Type"] = "application/json" },
+				Body = HttpService:JSONEncode({ creatorId = creatorId or "", isGroup = isGroup, universeId = tostring(game.GameId), assetType = wireType, items = chunk }),
+			})
+		end)
+		sent += #chunk
+		if not ok or not res.Success then plog("Upload request failed around item " .. sent .. ".", "fail"); break end
+		local data = HttpService:JSONDecode(res.Body)
+		for o, n in pairs(data.mapping or {}) do mapping[o] = n end
+		plog(("Progress: %d / %d %ss processed"):format(math.min(sent, #items), #items, kind), "info")
+		if data.canceled then stopped = true; break end
+		if data.authFailed or data.quotaReached then break end
+	end
+	if kind == "Image" then
+		plog("Resolving image ids so they render...", "info")
+		local resolved, failed = 0, 0
+		for old, decalId in pairs(mapping) do
+			local imgId
+			for attempt = 1, 3 do
+				local ok2, res2 = pcall(function() return InsertService:LoadAsset(tonumber(decalId)) end)
+				if ok2 and res2 then
+					for _, d in ipairs(res2:GetDescendants()) do
+						if d:IsA("Decal") then imgId = tostring(d.Texture):match("%d+") break end
+					end
+					res2:Destroy()
+				end
+				if imgId then break end
+				task.wait(0.6)
+			end
+			if imgId then
+				mapping[old] = imgId
+				resolved += 1
+			else
+				failed += 1
+				plog("Could not resolve image " .. decalId .. " to a renderable id (it may show blank).", "fail")
+			end
+		end
+		plog(("Resolved %d image(s); %d failed."):format(resolved, failed), failed > 0 and "fail" or "info")
+	end
+	local recording = ChangeHistoryService:TryBeginRecording("Nexus Reupload")
+	local props, values, scripts, attrs = applyEverywhere(mapping, byId)
+	if recording then ChangeHistoryService:FinishRecording(recording, Enum.FinishRecordingOperation.Commit) end
+	local n = 0
+	for _ in mapping do n += 1 end
+	if stopped then
+		plog(("Stopped. %d reuploaded and swapped before halting."):format(n), "info")
+	else
+		plog(("Done. %d reuploaded; swapped %d props, %d values, %d attrs, %d scripts."):format(n, props, values, attrs, scripts), n > 0 and "ok" or "info")
+	end
+end
+
+local function setStatus(state)
+	if state == true then
+		dot.BackgroundColor3 = GREEN; statusLbl.Text = "Connected to Nexus app"
+	elseif state == false then
+		dot.BackgroundColor3 = RED; statusLbl.Text = "App offline - open Nexus"
+	else
+		dot.BackgroundColor3 = GREY; statusLbl.Text = "Disconnected"
+	end
+end
+
+connBtn.Activated:Connect(function()
+	connected = not connected
+	connBtn.Text = connected and "Disconnect" or "Connect"
+	connBtn.BackgroundColor3 = connected and PURPLE or Color3.fromRGB(38, 38, 42)
+	if not connected then setStatus(nil) end
+end)
+button.Click:Connect(function() widget.Enabled = not widget.Enabled end)
+
+local busy = false
+task.spawn(function()
+	while true do
+		if connected then
+			local ok, res = pcall(function() return HttpService:RequestAsync({ Url = BASE .. "/job", Method = "GET" }) end)
+			if ok and res.Success then
+				setStatus(true)
+				if not busy then
+					local jok, j = pcall(function() return HttpService:JSONDecode(res.Body) end)
+					if jok and type(j) == "table" and j.assetType and j.assetType ~= "" then
+						busy = true
+						task.spawn(function()
+							local sok, serr = pcall(function() execute(j) end)
+							if not sok then plog("Error: " .. tostring(serr), "fail") end
+							busy = false
+						end)
+					end
+				end
+			else
+				setStatus(false)
+			end
+		end
+		task.wait(1.5)
+	end
+end)

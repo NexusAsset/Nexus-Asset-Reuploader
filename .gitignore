@@ -1,0 +1,11 @@
+*.exe
+*.exe~
+apikey.txt
+cookie.txt
+accounts.json
+session.json
+target.json
+config.ini
+*.log
+shots/
+node_modules/
