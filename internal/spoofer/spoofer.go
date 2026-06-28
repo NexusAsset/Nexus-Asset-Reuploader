@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+const (
+	developBase = "https://develop.roblox.com/v1/assets?assetIds="
+	batchURL    = "https://assetdelivery.roblox.com/v2/assets/batch"
+	userAgent   = "RobloxStudio/WinInet"
+)
+
 var decalTexRe = regexp.MustCompile(`name="Texture">\s*<url>[^<]*?(\d{3,})`)
 
 func decalImageID(b []byte) (string, bool) {
@@ -26,17 +32,13 @@ func decalImageID(b []byte) (string, bool) {
 	return string(m[1]), true
 }
 
-const (
-	developBase = "https://develop.roblox.com/v1/assets?assetIds="
-	batchURL    = "https://assetdelivery.roblox.com/v2/assets/batch"
-	userAgent   = "RobloxStudio/WinInet"
-)
-
 type Resolver struct {
 	http        *http.Client
 	sem         chan struct{}
 	mu          sync.Mutex
 	placesCache map[string][]string
+	backendURL  string
+	backendKey  string
 }
 
 func New() *Resolver {
@@ -45,6 +47,13 @@ func New() *Resolver {
 		sem:         make(chan struct{}, 8),
 		placesCache: map[string][]string{},
 	}
+}
+
+func NewWithBackend(url, key string) *Resolver {
+	r := New()
+	r.backendURL = strings.TrimRight(strings.TrimSpace(url), "/")
+	r.backendKey = strings.TrimSpace(key)
+	return r
 }
 
 func (r *Resolver) acquire() { r.sem <- struct{}{} }
@@ -56,7 +65,7 @@ type loc struct {
 }
 
 func (r *Resolver) Resolve(cookie, currentPlaceID string, ids []string) (map[string][]byte, map[string]string) {
-	out, errs := r.resolveOnce(cookie, currentPlaceID, ids)
+	out, errs, won := r.resolveOnce(cookie, currentPlaceID, ids)
 
 	innerOf := map[string]string{}
 	var inner []string
@@ -67,7 +76,7 @@ func (r *Resolver) Resolve(cookie, currentPlaceID string, ids []string) (map[str
 		}
 	}
 	if len(inner) > 0 {
-		imgOut, imgErr := r.resolveOnce(cookie, currentPlaceID, inner)
+		imgOut, imgErr, imgWon := r.resolveOnce(cookie, currentPlaceID, inner)
 		for orig, iid := range innerOf {
 			if ib, ok := imgOut[iid]; ok {
 				out[orig] = ib
@@ -77,14 +86,22 @@ func (r *Resolver) Resolve(cookie, currentPlaceID string, ids []string) (map[str
 				errs[orig] = "decal image " + iid + ": " + imgErr[iid]
 			}
 		}
+		for a, p := range imgWon {
+			won[a] = p
+		}
 	}
+
+	r.report(won)
 	return out, errs
 }
 
-func (r *Resolver) resolveOnce(cookie, currentPlaceID string, ids []string) (map[string][]byte, map[string]string) {
+func (r *Resolver) resolveOnce(cookie, currentPlaceID string, ids []string) (map[string][]byte, map[string]string, map[string]string) {
 	out := map[string][]byte{}
 	errs := map[string]string{}
+	won := map[string]string{}
 	var mu sync.Mutex
+
+	backend := r.knownPlaces(ids)
 
 	byCreator := map[string][]string{}
 	for _, chunk := range chunkStr(ids, 50) {
@@ -111,24 +128,40 @@ func (r *Resolver) resolveOnce(cookie, currentPlaceID string, ids []string) (map
 		go func(creator string, cids []string) {
 			defer wg.Done()
 
-			places := r.places(cookie, creator)
-			if currentPlaceID != "" {
-				places = append([]string{currentPlaceID}, places...)
+			seen := map[string]bool{}
+			var cand []string
+			add := func(p string) {
+				if p != "" && !seen[p] {
+					seen[p] = true
+					cand = append(cand, p)
+				}
 			}
-			if len(places) == 0 {
+			add(currentPlaceID)
+			for _, id := range cids {
+				for _, p := range backend[id] {
+					add(p)
+				}
+			}
+			for _, p := range r.places(cookie, creator) {
+				add(p)
+			}
+			if len(cand) == 0 {
 				mu.Lock()
 				for _, id := range cids {
-					errs[id] = "no public places for creator " + creator
+					errs[id] = "no candidate places for " + creator
 				}
 				mu.Unlock()
 				return
 			}
 
-			got, fail := r.fetchAcrossPlaces(cookie, places, cids)
+			got, fail, gwon := r.fetchAcrossPlaces(cookie, cand, cids)
 			mu.Lock()
 			for id, b := range got {
 				out[id] = b
 				delete(errs, id)
+			}
+			for id, p := range gwon {
+				won[id] = p
 			}
 			for id, e := range fail {
 				if _, done := out[id]; !done {
@@ -139,11 +172,12 @@ func (r *Resolver) resolveOnce(cookie, currentPlaceID string, ids []string) (map
 		}(creator, cids)
 	}
 	wg.Wait()
-	return out, errs
+	return out, errs, won
 }
 
-func (r *Resolver) fetchAcrossPlaces(cookie string, places, ids []string) (map[string][]byte, map[string]string) {
+func (r *Resolver) fetchAcrossPlaces(cookie string, places, ids []string) (map[string][]byte, map[string]string, map[string]string) {
 	out := map[string][]byte{}
+	won := map[string]string{}
 	lastErr := map[string]string{}
 	var mu sync.Mutex
 	remaining := append([]string(nil), ids...)
@@ -176,7 +210,7 @@ func (r *Resolver) fetchAcrossPlaces(cookie string, places, ids []string) (map[s
 					continue
 				}
 				wg.Add(1)
-				go func(id, url string) {
+				go func(id, url, place string) {
 					defer wg.Done()
 					data, derr := r.fetchCDN(url)
 					if derr != nil {
@@ -188,8 +222,9 @@ func (r *Resolver) fetchAcrossPlaces(cookie string, places, ids []string) (map[s
 					}
 					mu.Lock()
 					out[id] = data
+					won[id] = place
 					mu.Unlock()
-				}(id, locs[i].url)
+				}(id, locs[i].url, place)
 			}
 		}
 		wg.Wait()
@@ -203,11 +238,64 @@ func (r *Resolver) fetchAcrossPlaces(cookie string, places, ids []string) (map[s
 		}
 		m := lastErr[id]
 		if m == "" {
-			m = "no access via creator places"
+			m = "no access via any candidate place"
 		}
 		fail[id] = m
 	}
-	return out, fail
+	return out, fail, won
+}
+
+func (r *Resolver) knownPlaces(ids []string) map[string][]string {
+	empty := map[string][]string{}
+	if r.backendURL == "" || len(ids) == 0 {
+		return empty
+	}
+	body, _ := json.Marshal(map[string]any{"assetIds": ids})
+	req, _ := http.NewRequest("POST", r.backendURL+"/v1/known-places", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.acquire()
+	resp, err := r.http.Do(req)
+	r.release()
+	if err != nil {
+		return empty
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return empty
+	}
+	var out struct {
+		Result map[string][]string `json:"result"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&out) != nil || out.Result == nil {
+		return empty
+	}
+	return out.Result
+}
+
+func (r *Resolver) report(won map[string]string) {
+	if r.backendURL == "" || len(won) == 0 {
+		return
+	}
+	type pair struct {
+		AssetID string `json:"assetId"`
+		PlaceID string `json:"placeId"`
+	}
+	pairs := make([]pair, 0, len(won))
+	for a, p := range won {
+		pairs = append(pairs, pair{a, p})
+	}
+	body, _ := json.Marshal(map[string]any{"pairs": pairs})
+	req, _ := http.NewRequest("POST", r.backendURL+"/v1/report", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if r.backendKey != "" {
+		req.Header.Set("x-nexus-key", r.backendKey)
+	}
+	r.acquire()
+	resp, err := r.http.Do(req)
+	r.release()
+	if err == nil {
+		resp.Body.Close()
+	}
 }
 
 func (r *Resolver) assetsInfo(cookie string, ids []string) (map[string]string, error) {

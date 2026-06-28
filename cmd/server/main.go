@@ -57,7 +57,7 @@ func main() {
 	up := opencloud.New()
 	dl := download.New()
 	store := accounts.Load(accountsPath)
-	srv := server.New(up, dl, store, keyPath, cookiePath)
+	srv := server.New(up, dl, store, keyPath, cookiePath, cfg["knownplaces_url"], cfg["knownplaces_key"])
 
 	mux := srv.Routes()
 	registerDiscordAuth(mux, port)

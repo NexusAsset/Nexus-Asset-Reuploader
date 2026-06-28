@@ -88,8 +88,12 @@ type job struct {
 	IsGroup   bool   `json:"isGroup"`
 }
 
-func New(up *opencloud.Uploader, dl *download.Downloader, store *accounts.Store, keyPath, cookiePath string) *Server {
-	s := &Server{up: up, dl: dl, sp: spoofer.New(), store: store, keyPath: keyPath, cookiePath: cookiePath}
+func New(up *opencloud.Uploader, dl *download.Downloader, store *accounts.Store, keyPath, cookiePath, kpURL, kpKey string) *Server {
+	sp := spoofer.New()
+	if strings.TrimSpace(kpURL) != "" {
+		sp = spoofer.NewWithBackend(kpURL, kpKey)
+	}
+	s := &Server{up: up, dl: dl, sp: sp, store: store, keyPath: keyPath, cookiePath: cookiePath}
 	if b, err := os.ReadFile(targetFile); err == nil {
 		_ = json.Unmarshal(b, &s.target)
 	}
