@@ -12,6 +12,17 @@ Re-upload your Roblox **animations, audio, and images** to your own account or g
 
 > Windows may show a SmartScreen warning on first run (the app isn't code-signed yet) — click **More info → Run anyway**.
 
+## Windows flagged the download? (false positive)
+
+Windows Defender / SmartScreen may warn that this app is "a virus or potentially unwanted software." **It is a false positive.** Nexus is a Go program that handles your Roblox API key and login cookie *locally* to upload assets — that pattern trips antivirus heuristics even though the code is clean and runs only on your machine. A scan finds no actual malware.
+
+To run it:
+1. If Windows blocks it after extracting: open **Windows Security → Virus & threat protection → Protection history**, find the Nexus item, and click **Allow** / **Restore**.
+2. Or right-click `Nexus Asset Reuploader.exe` → **Properties** → tick **Unblock** → OK.
+3. Confirm you have the genuine file: its **SHA-256 must match** the value on the release page (see "Verify your download" below).
+
+The warning is being submitted to Microsoft for review, and a code-signed build is planned to remove it entirely.
+
 ## Install
 
 1. Unzip the download anywhere.
