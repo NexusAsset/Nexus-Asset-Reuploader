@@ -59,9 +59,10 @@ type Server struct {
 	up         *opencloud.Uploader
 	dl         *download.Downloader
 	sp         *spoofer.Resolver
-	store      *accounts.Store
-	keyPath    string
-	cookiePath string
+	store       *accounts.Store
+	keyPath     string
+	cookiePath  string
+	uploadSpeed int
 
 	mu                 sync.Mutex
 	feed               []Activity
@@ -98,6 +99,12 @@ func New(up *opencloud.Uploader, dl *download.Downloader, store *accounts.Store,
 		_ = json.Unmarshal(b, &s.target)
 	}
 	return s
+}
+
+func (s *Server) SetUploadSpeed(n int) {
+	if n > 0 {
+		s.uploadSpeed = n
+	}
 }
 
 func (s *Server) push(kind, text string) {
@@ -475,7 +482,13 @@ func (s *Server) handleReupload(w http.ResponseWriter, r *http.Request) {
 
 	s.prefetch(&req, dlCookies)
 
-	const workers = 4
+	workers := s.uploadSpeed
+	if workers <= 0 {
+		workers = 4
+	}
+	if workers > 16 {
+		workers = 16
+	}
 	var mu sync.Mutex // guards next, curAcc, stopAll, ok, fail, and the resp maps
 	next, curAcc, ok, fail := 0, 0, 0, 0
 	stopAll := false

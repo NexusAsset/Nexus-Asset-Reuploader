@@ -65,6 +65,9 @@ func main() {
 	dl := download.New()
 	store := accounts.Load(accountsPath)
 	srv := server.New(up, dl, store, keyPath, cookiePath, kpURL, cfg["knownplaces_key"])
+	if n, err := strconv.Atoi(strings.TrimSpace(cfg["upload_speed"])); err == nil {
+		srv.SetUploadSpeed(n)
+	}
 
 	mux := srv.Routes()
 	registerDiscordAuth(mux, port)
