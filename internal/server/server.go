@@ -738,9 +738,15 @@ func (s *Server) uploadOne(acc accounts.Account, assetType string, it item) (str
 		}
 		data = d
 	} else {
-		d, err := s.dl.Asset(acc.Cookie, it.ID)
+		cookie := acc.Cookie
+		if cookie == "" {
+			if cks := s.downloaderCookies(); len(cks) > 0 {
+				cookie = cks[0]
+			}
+		}
+		d, err := s.dl.Asset(cookie, it.ID)
 		if err != nil {
-			return "", fmt.Errorf("download: %w", err)
+			return "", fmt.Errorf("no access (not reachable via any account or known place): %w", err)
 		}
 		data = d
 	}
