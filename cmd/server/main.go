@@ -183,6 +183,12 @@ func openBrowser(url string) {
 }
 
 func connectorSecretPath() string {
+	if dir, err := os.UserConfigDir(); err == nil {
+		d := filepath.Join(dir, "NexusReuploader")
+		if os.MkdirAll(d, 0o700) == nil {
+			return filepath.Join(d, "connector.secret")
+		}
+	}
 	if exe, err := os.Executable(); err == nil {
 		return filepath.Join(filepath.Dir(exe), "connector.secret")
 	}
