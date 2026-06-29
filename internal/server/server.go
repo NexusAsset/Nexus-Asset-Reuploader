@@ -60,9 +60,10 @@ type Server struct {
 	dl         *download.Downloader
 	sp         *spoofer.Resolver
 	store       *accounts.Store
-	keyPath     string
-	cookiePath  string
-	uploadSpeed int
+	keyPath        string
+	cookiePath     string
+	uploadSpeed    int
+	connectorToken string
 
 	mu                 sync.Mutex
 	feed               []Activity
@@ -105,6 +106,14 @@ func (s *Server) SetUploadSpeed(n int) {
 	if n > 0 {
 		s.uploadSpeed = n
 	}
+}
+
+func (s *Server) SetConnectorToken(t string) { s.connectorToken = strings.TrimSpace(t) }
+
+// connectorAuthed verifies a request came from the real Nexus plugin. The plugin
+// sends X-Nexus-Token (injected at install). Empty token = guard disabled.
+func (s *Server) connectorAuthed(r *http.Request) bool {
+	return s.connectorToken == "" || r.Header.Get("X-Nexus-Token") == s.connectorToken
 }
 
 func (s *Server) push(kind, text string) {
@@ -199,6 +208,10 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true})
 		return
 	}
+	if !s.connectorAuthed(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	s.mu.Lock()
 	reconnected := !s.pluginWasConnected
 	s.pluginWasConnected = true
@@ -217,6 +230,10 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePluginLog(w http.ResponseWriter, r *http.Request) {
+	if !s.connectorAuthed(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	var b struct {
 		Kind string `json:"kind"`
 		Text string `json:"text"`
@@ -457,6 +474,10 @@ func (s *Server) downloaderCookies() []string {
 }
 
 func (s *Server) handleReupload(w http.ResponseWriter, r *http.Request) {
+	if !s.connectorAuthed(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	var req reuploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

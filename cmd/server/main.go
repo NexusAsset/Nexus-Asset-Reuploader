@@ -2,7 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -68,6 +71,8 @@ func main() {
 	if n, err := strconv.Atoi(strings.TrimSpace(cfg["upload_speed"])); err == nil {
 		srv.SetUploadSpeed(n)
 	}
+	connToken := loadOrCreateSecret("connector.secret")
+	srv.SetConnectorToken(connToken)
 
 	mux := srv.Routes()
 	registerDiscordAuth(mux, port)
@@ -83,7 +88,8 @@ func main() {
 			return
 		}
 		p := filepath.Join(dir, "NexusReuploader.rbxmx")
-		if err := os.WriteFile(p, pluginRBXMX, 0o644); err != nil {
+		out := bytes.ReplaceAll(pluginRBXMX, []byte("NEXUS_CONNECTOR_TOKEN"), []byte(connToken))
+		if err := os.WriteFile(p, out, 0o644); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -172,6 +178,21 @@ func openBrowser(url string) {
 	default:
 		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	}
+}
+
+func loadOrCreateSecret(path string) string {
+	if b, err := os.ReadFile(path); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	s := hex.EncodeToString(buf)
+	_ = os.WriteFile(path, []byte(s), 0o600)
+	return s
 }
 
 func loadConfig(path string) map[string]string {

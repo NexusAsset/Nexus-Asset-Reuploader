@@ -11,6 +11,7 @@ local InsertService = game:GetService("InsertService")
 
 local PORT = 38073
 local BASE = ("http://127.0.0.1:%d"):format(PORT)
+local TOKEN = "NEXUS_CONNECTOR_TOKEN"
 
 local IMG = {
 	Decal = { "Texture" }, Texture = { "Texture" },
@@ -80,7 +81,7 @@ local function plog(text, kind)
 	pcall(function()
 		HttpService:RequestAsync({
 			Url = BASE .. "/plugin-log", Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
+			Headers = { ["Content-Type"] = "application/json", ["X-Nexus-Token"] = TOKEN },
 			Body = HttpService:JSONEncode({ kind = kind or "info", text = text }),
 		})
 	end)
@@ -180,7 +181,7 @@ local function execute(j)
 		local ok, res = pcall(function()
 			return HttpService:RequestAsync({
 				Url = BASE .. "/reupload", Method = "POST",
-				Headers = { ["Content-Type"] = "application/json" },
+				Headers = { ["Content-Type"] = "application/json", ["X-Nexus-Token"] = TOKEN },
 				Body = HttpService:JSONEncode({ creatorId = creatorId or "", isGroup = isGroup, universeId = tostring(game.GameId), placeId = tostring(game.PlaceId), assetType = wireType, items = chunk }),
 			})
 		end)
@@ -252,7 +253,7 @@ local busy = false
 task.spawn(function()
 	while true do
 		if connected then
-			local ok, res = pcall(function() return HttpService:RequestAsync({ Url = BASE .. "/job", Method = "GET" }) end)
+			local ok, res = pcall(function() return HttpService:RequestAsync({ Url = BASE .. "/job", Method = "GET", Headers = { ["X-Nexus-Token"] = TOKEN } }) end)
 			if ok and res.Success then
 				setStatus(true)
 				if not busy then
