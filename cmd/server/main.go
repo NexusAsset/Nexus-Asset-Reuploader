@@ -72,7 +72,7 @@ func main() {
 	if n, err := strconv.Atoi(strings.TrimSpace(cfg["upload_speed"])); err == nil {
 		srv.SetUploadSpeed(n)
 	}
-	connToken := loadOrCreateSecret("connector.secret")
+	connToken := loadOrCreateSecret(connectorSecretPath())
 	srv.SetConnectorToken(connToken)
 	srv.SetFailCache(failcache.Load("failcache.json"))
 
@@ -180,6 +180,13 @@ func openBrowser(url string) {
 	default:
 		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	}
+}
+
+func connectorSecretPath() string {
+	if exe, err := os.Executable(); err == nil {
+		return filepath.Join(filepath.Dir(exe), "connector.secret")
+	}
+	return "connector.secret"
 }
 
 func loadOrCreateSecret(path string) string {
