@@ -238,6 +238,8 @@ end
 local function setStatus(state)
 	if state == true then
 		dot.BackgroundColor3 = GREEN; statusLbl.Text = "Connected to AssetFlow app"
+	elseif state == "mismatch" then
+		dot.BackgroundColor3 = RED; statusLbl.Text = "Out of date - reinstall plugin in the app"
 	elseif state == false then
 		dot.BackgroundColor3 = RED; statusLbl.Text = "App offline - open AssetFlow"
 	else
@@ -273,7 +275,7 @@ task.spawn(function()
 					end
 				end
 			else
-				setStatus(false)
+				if ok and res.StatusCode == 403 then setStatus("mismatch") else setStatus(false) end
 			end
 		end
 		task.wait(1.5)
